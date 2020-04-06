@@ -1,0 +1,330 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+  "Description" : "This cfm file will deploy a solution based on eventbridge",
+  "Resources" : {
+    "iamRoleLambda": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "lambda.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "Description": "Lambda Role for EventBus",
+        "Path": "/",
+        "RoleName": {
+          "Fn::Join": [
+            "-",
+            [
+              "event-bus",
+              {
+                "Ref": "AWS::Region"
+              }
+            ]
+          ]
+        },
+        "Policies": [{
+          "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                  {
+                      "Action": [
+                          "logs:*"
+                      ],
+                      "Effect": "Allow",
+                      "Resource": "*"
+                  },
+                {
+                       "Action": [
+                          "events:*"
+                      ],
+                      "Effect": "Allow",
+                      "Resource": "*"
+                }
+              ]
+          },
+          "PolicyName": "event-bus-logs"
+        }]
+      }
+    },
+    "lambdaPrintOrder": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "ZipFile": "import json\n\ndef lambda_handler(event, context):\n    print(event)\n    return event"},
+        "Handler": "index.lambda_handler",
+        "Runtime": "python3.7",
+        "Role": {
+          "Fn::GetAtt": [
+            "iamRoleLambda",
+            "Arn"
+          ]
+        },
+        "FunctionName": "PrintOrders"
+      }
+    },
+    "lambdaPrintWarehouse": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "ZipFile": "import json\n\ndef lambda_handler(event, context):\n    print(event)\n    return event"},
+        "Handler": "index.lambda_handler",
+        "Runtime": "python3.7",
+        "Role": {
+          "Fn::GetAtt": [
+            "iamRoleLambda",
+            "Arn"
+          ]
+        },
+        "FunctionName": "PrintWarehouse"
+      }
+    },
+    "lambdaPrintHighOrder": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "ZipFile": "import json\nimport boto3\nfrom datetime import datetime\n\ndef lambda_handler(event, context):\n    print(event)\n    client = boto3.client('events')\n    invoiceJson={\"orderID\":event[\"detail\"][\"id\"],\"amount\":event[\"detail\"][\"amount\"],\"customer\":event[\"detail\"][\"account\"]}\n    response=client.put_events(Entries=[{'Time': datetime.now(),'Source': 'invoice','DetailType': 'order','EventBusName': 'demo','Detail':json.dumps(invoiceJson)}])\n    return event"},
+        "Handler": "index.lambda_handler",
+        "Runtime": "python3.7",
+        "Role": {
+          "Fn::GetAtt": [
+            "iamRoleLambda",
+            "Arn"
+          ]
+        },
+        "FunctionName": "PrintHighOrder"
+      }
+    },
+    "lambdaPrintInvoice": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "ZipFile": "import json\n\ndef lambda_handler(event, context):\n    print(event)\n    return event"},
+        "Handler": "index.lambda_handler",
+        "Runtime": "python3.7",
+        "Role": {
+          "Fn::GetAtt": [
+            "iamRoleLambda",
+            "Arn"
+          ]
+        },
+        "FunctionName": "PrintInvoice"
+      }
+    },
+    "myBUS": {
+    "Type": "AWS::Events::EventBus",
+    "Properties": {
+        "Name": "demo"
+      }
+    },
+    "lambdaPermissionsPrintOrder": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "lambdaPrintOrder",
+            "Arn"
+          ]
+        },
+        "Principal": "events.amazonaws.com"
+
+      }
+    },
+    "lambdaPermissionsPrintWarehouse": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "lambdaPrintWarehouse",
+            "Arn"
+          ]
+        },
+        "Principal": "events.amazonaws.com"
+
+      }
+    },
+    "lambdaPermissionsPrintHighOrder": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "lambdaPrintHighOrder",
+            "Arn"
+          ]
+        },
+        "Principal": "events.amazonaws.com"
+      }
+    },
+    "lambdaPermissionsPrintInvoice": {
+      "Type": "AWS::Lambda::Permission",
+      "Properties": {
+        "Action": "lambda:InvokeFunction",
+        "FunctionName": {
+          "Fn::GetAtt": [
+            "lambdaPrintInvoice",
+            "Arn"
+          ]
+        },
+        "Principal": "events.amazonaws.com"
+      }
+    },
+    "targetOrder": {
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "Description" : "catch all orders",
+        "EventBusName" : {
+          "Fn::GetAtt": [
+            "myBUS",
+            "Name"
+          ]
+        },
+        "EventPattern" : {
+          "source": [
+            "order"
+          ]
+        },
+        "Name": "PrintOrder",
+        "State": "ENABLED",
+        "Targets": [
+          {
+            "Arn": {
+              "Fn::GetAtt": [
+                "lambdaPrintOrder",
+                "Arn"
+              ]
+            },
+            "Id": {
+              "Fn::Join": [
+                "-",
+                [
+                  "event-bus",
+                  {
+                    "Ref": "AWS::Region"
+                  },
+                  "printOrders"
+                ]
+              ]
+            }
+          },
+          {
+            "InputTransformer": {
+              "InputPathsMap": {"orderID": "$.detail.id","items": "$.detail.items"},
+              "InputTemplate" : "{\"orderID\":<orderID>,\"items\":<items>}"
+            },
+            "Arn": {
+              "Fn::GetAtt": [
+                "lambdaPrintWarehouse",
+                "Arn"
+              ]
+            },
+            "Id": {
+              "Fn::Join": [
+                "-",
+                [
+                  "event-bus",
+                  {
+                    "Ref": "AWS::Region"
+                  },
+                  "printWarehouse"
+                ]
+              ]
+            }
+
+          }
+        ]
+
+      }
+    },
+    "targetHighOrder": {
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "Description" : "catch high orders (over 500 amount)",
+        "EventBusName" : {
+          "Fn::GetAtt": [
+            "myBUS",
+            "Name"
+          ]
+        },
+        "EventPattern" : "{\"source\":[\"order\"],\"detail\": {\"amount\": [{\"numeric\": [\">\",500]}]}}",
+        "Name": "PrintHighOrder",
+        "State": "ENABLED",
+        "Targets": [
+          {
+            "Arn": {
+              "Fn::GetAtt": [
+                "lambdaPrintHighOrder",
+                "Arn"
+              ]
+            },
+            "Id": {
+              "Fn::Join": [
+                "-",
+                [
+                  "event-bus",
+                  {
+                    "Ref": "AWS::Region"
+                  },
+                  "printHighOrder"
+                ]
+              ]
+            }
+          }
+        ]
+
+      }
+    },
+    "targetinvoice": {
+      "Type": "AWS::Events::Rule",
+      "Properties": {
+        "Description" : "catch all Invoices",
+        "EventBusName" : {
+          "Fn::GetAtt": [
+            "myBUS",
+            "Name"
+          ]
+        },
+        "EventPattern" : {
+          "source": [
+            "invoice"
+          ]
+        },
+        "Name": "PrintInvoice",
+        "State": "ENABLED",
+        "Targets": [
+          {
+            "Arn": {
+              "Fn::GetAtt": [
+                "lambdaPrintInvoice",
+                "Arn"
+              ]
+            },
+            "Id": {
+              "Fn::Join": [
+                "-",
+                [
+                  "event-bus",
+                  {
+                    "Ref": "AWS::Region"
+                  },
+                  "printInvoice"
+                ]
+              ]
+            }
+          }
+        ]
+
+      }
+    },
+  }
+}
+
